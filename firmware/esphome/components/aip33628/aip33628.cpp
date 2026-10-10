@@ -4,12 +4,24 @@
 
 #include <cmath>
 #include <driver/gptimer.h>
+#include <sdkconfig.h>
 #include <soc/gpio_struct.h>
 
 namespace esphome {
 namespace aip33628 {
 
 static const char *const TAG = "aip33628";
+
+// The classic ESP32 declares the set and clear registers as plain words.
+// The S2, S3, C3 and C6 wrap them in unions, so the store goes through .val.
+// Both compile to the same single store.
+#if CONFIG_IDF_TARGET_ESP32
+#define PORT_SET(m) (GPIO.out_w1ts = (m))
+#define PORT_CLR(m) (GPIO.out_w1tc = (m))
+#else
+#define PORT_SET(m) (GPIO.out_w1ts.val = (m))
+#define PORT_CLR(m) (GPIO.out_w1tc.val = (m))
+#endif
 
 // Each digit is one driver plus one pair of COM pairs, ten LED positions.
 // Driver 1 carries the hours, driver 2 the minutes.
@@ -250,7 +262,7 @@ void IRAM_ATTR Aip33628Panel::send_pair_(uint16_t ss1, uint16_t ss2, uint8_t cs,
   const uint32_t clks = clk_mask_ | clk2_mask_;
   const uint32_t dats = data_mask_ | data2_mask_;
 
-  GPIO.out_w1tc = clks | dats;
+  PORT_CLR(clks | dats);
 
   for (int i = 0; i < 30; i++) {
     uint32_t set = 0;
@@ -261,18 +273,18 @@ void IRAM_ATTR Aip33628Panel::send_pair_(uint16_t ss1, uint16_t ss2, uint8_t cs,
     f1 >>= 1;
     f2 >>= 1;
     // Data settles while CLK is low, then one rising edge shifts both buses.
-    GPIO.out_w1tc = dats & ~set;
-    GPIO.out_w1ts = set;
-    GPIO.out_w1ts = clks;
+    PORT_CLR(dats & ~set);
+    PORT_SET(set);
+    PORT_SET(clks);
     if (i < 29)
-      GPIO.out_w1tc = clks;
+      PORT_CLR(clks);
   }
 
   // CLK is still high after bit 29. A DATA rising edge here is the latch.
-  GPIO.out_w1tc = dats;
-  GPIO.out_w1ts = dats;
-  GPIO.out_w1tc = dats;
-  GPIO.out_w1tc = clks;
+  PORT_CLR(dats);
+  PORT_SET(dats);
+  PORT_CLR(dats);
+  PORT_CLR(clks);
 }
 
 // Walk the schedule the renderer built. The timer runs at a fixed UNIT_US

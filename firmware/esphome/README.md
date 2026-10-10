@@ -56,21 +56,16 @@ higher pin.
 
 ### S2, S3, C3 and C6
 
-These need a small code change, and I have not tried any of them.
+They need no code change. A C3 build compiles and boots; the panel itself is
+not yet confirmed on any of them.
+Those chips declare the GPIO output registers as unions rather than plain
+words, and `send_pair_()` picks the right store for the target at compile
+time. Change `board:` in `clock.yaml` to match your module and keep the four
+display pins below GPIO32.
 
-Those chips declare the GPIO output registers as unions, so the bare
-assignments in `send_pair_()` do not compile:
-
-```cpp
-GPIO.out_w1ts = set;      // classic ESP32
-GPIO.out_w1ts.val = set;  // everything newer
-```
-
-Nine lines in that one function, plus `board:` in `clock.yaml` changed to match
-your module. Nothing else should need touching.
-
-Config validation will not warn you, because the component accepts any ESP32.
-The first sign of trouble is a compile error inside `aip33628.cpp`.
+The C3, C6 and S2 are single core, so the scan interrupt shares the CPU with
+WiFi instead of having a core to itself. Expect more flicker under network
+load than on a classic ESP32.
 
 ### ESP8266
 
